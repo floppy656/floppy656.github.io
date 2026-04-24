@@ -1,7 +1,7 @@
 // Edit your profile here only.
 const PROFILE = {
   nickname: "Floppx.",
-  bio: "horYo, my names Floppx and im a starting developer. Im trying to improve everyday so if you have any tips/recomendations dm me anywhere. Also thanks for every support :P.",
+  bio: "Yo, my names Floppx and im a starting developer. Im trying to improve everyday so if you have any tips/recomendations dm me anywhere. Also thanks for every support :P.",
   avatar: "./assets/pfp.jpg",
   background: "./assets/bg.gif", // supports gif/jpg/png/webp/mp4 background image file
   music: "./assets/music.mp3",
@@ -22,6 +22,8 @@ const VIEW_KEY = "views";
 const LIKE_KEY = "likes";
 const LIKE_LOCAL_FLAG = "liked_once";
 const VIEW_LOCAL_FLAG = "viewed_once";
+const LIKE_COUNT_LOCAL = "like_count_local";
+const VIEW_COUNT_LOCAL = "view_count_local";
 const COUNTER_REFRESH_MS = 3000;
 
 const memoryStore = {};
@@ -52,6 +54,31 @@ if (music) {
 
 const setNumber = (el, value) => {
   if (el) el.textContent = String(value);
+};
+
+const getCurrentCount = (el) => {
+  if (!el) return 0;
+  const parsed = Number.parseInt(el.textContent || "0", 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const getStoredCount = (key) => {
+  try {
+    const parsed = Number.parseInt(localStorage.getItem(key) || "0", 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  } catch (error) {
+    const fallback = Number.parseInt(memoryStore[key] || "0", 10);
+    return Number.isNaN(fallback) ? 0 : fallback;
+  }
+};
+
+const setStoredCount = (key, value) => {
+  const clean = String(Math.max(0, Number.parseInt(String(value), 10) || 0));
+  try {
+    localStorage.setItem(key, clean);
+  } catch (error) {
+    memoryStore[key] = clean;
+  }
 };
 
 const getFlag = (key) => {
@@ -114,8 +141,11 @@ const refreshCounters = async () => {
     ]);
     setNumber(viewCountEl, views);
     setNumber(likeCountEl, likes);
+    setStoredCount(VIEW_COUNT_LOCAL, views);
+    setStoredCount(LIKE_COUNT_LOCAL, likes);
   } catch (error) {
-    // Keep existing numbers when API is temporarily unavailable.
+    setNumber(viewCountEl, getStoredCount(VIEW_COUNT_LOCAL));
+    setNumber(likeCountEl, getStoredCount(LIKE_COUNT_LOCAL));
   }
 };
 
@@ -124,9 +154,14 @@ const registerViewOnce = async () => {
     const shouldCountView = !getFlag(VIEW_LOCAL_FLAG);
     const views = await counterRequestWithRetry(VIEW_KEY, shouldCountView);
     setNumber(viewCountEl, views);
+    setStoredCount(VIEW_COUNT_LOCAL, views);
     if (shouldCountView) setFlag(VIEW_LOCAL_FLAG, true);
   } catch (error) {
-    await refreshCounters();
+    const localViews = getStoredCount(VIEW_COUNT_LOCAL);
+    const adjustedViews = !getFlag(VIEW_LOCAL_FLAG) ? localViews + 1 : localViews;
+    setNumber(viewCountEl, adjustedViews);
+    setStoredCount(VIEW_COUNT_LOCAL, adjustedViews);
+    if (!getFlag(VIEW_LOCAL_FLAG)) setFlag(VIEW_LOCAL_FLAG, true);
   }
 };
 
@@ -147,16 +182,24 @@ const setupLikeButton = async () => {
     try {
       const likes = await counterRequest(LIKE_KEY, true);
       setNumber(likeCountEl, likes);
+      setStoredCount(LIKE_COUNT_LOCAL, likes);
       setFlag(LIKE_LOCAL_FLAG, true);
       likeBtn.textContent = "Thanks!";
     } catch (error) {
-      likeBtn.disabled = false;
-      likeBtn.textContent = "Failed - Try Again";
+      // Fallback: still accept the like locally so user experience never breaks.
+      const currentLikes = getCurrentCount(likeCountEl);
+      const localLikes = currentLikes + 1;
+      setNumber(likeCountEl, localLikes);
+      setStoredCount(LIKE_COUNT_LOCAL, localLikes);
+      setFlag(LIKE_LOCAL_FLAG, true);
+      likeBtn.textContent = "Thanks!";
     }
   });
 };
 
 const init = async () => {
+  setNumber(viewCountEl, getStoredCount(VIEW_COUNT_LOCAL));
+  setNumber(likeCountEl, getStoredCount(LIKE_COUNT_LOCAL));
   await Promise.all([registerViewOnce(), refreshCounters()]);
   setupLikeButton();
   setInterval(refreshCounters, COUNTER_REFRESH_MS);
