@@ -3,7 +3,7 @@ const PROFILE = {
   nickname: "Floppx.",
   bio: "Yo, my names Floppx and im a starting developer. Im trying to improve everyday so if you have any tips/recomendations dm me anywhere. Also thanks for every support :P.",
   avatar: "./assets/pfp.jpg",
-  background: "./assets/bg.gif", // supports gif/jpg/png/webp/mp4 background image file
+  background: "./assets/bg.gif", // supports gif/jpg/png/webp
   music: "./assets/music.mp3",
   musicVolume: 0.25 // 0.0 to 1.0
 };
@@ -17,7 +17,10 @@ const likeBtn = document.getElementById("likeBtn");
 const likeCountEl = document.getElementById("likeCount");
 const viewCountEl = document.getElementById("viewCount");
 
-const COUNTER_NAMESPACE = "floppy656-personal-site-v2";
+// Fill these from your Supabase project settings.
+const SUPABASE_URL = "https://piebqfymfsdpclxtywng.supabase.co/rest/v1/";
+const SUPABASE_ANON_KEY = "sb_publishable_PoCiVcFVc1XHpjs3aJnR-w_5VUIyHd9";
+
 const VIEW_KEY = "views";
 const LIKE_KEY = "likes";
 const LIKE_LOCAL_FLAG = "liked_once";
@@ -97,15 +100,30 @@ const setFlag = (key, value) => {
   }
 };
 
-const fetchJsonWithTimeout = async (url, timeoutMs = 8000) => {
+const isSupabaseConfigured = () =>
+  SUPABASE_URL.startsWith("https://") && !SUPABASE_URL.includes("PASTE_") && !SUPABASE_ANON_KEY.includes("PASTE_");
+
+const supabaseRequest = async (path, body, timeoutMs = 8000) => {
+  if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
+
+  const normalizedBase = SUPABASE_URL.replace(/\/+$/, "");
+  const url = `${normalizedBase}${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const response = await fetch(url, {
-      method: "GET",
-      cache: "no-store",
-      signal: controller.signal
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Accept: "application/json"
+      },
+      body: JSON.stringify(body)
     });
+
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
   } finally {
@@ -113,31 +131,23 @@ const fetchJsonWithTimeout = async (url, timeoutMs = 8000) => {
   }
 };
 
-const counterRequest = async (key, hit) => {
-  const route = hit ? "hit" : "get";
-  const url = `https://api.countapi.xyz/${route}/${COUNTER_NAMESPACE}/${key}`;
-  const data = await fetchJsonWithTimeout(url);
-  if (typeof data.value !== "number") throw new Error("Bad counter payload");
-  return data.value;
+const getCounter = async (key) => {
+  const data = await supabaseRequest(`/rest/v1/rpc/get_counter`, { key_name: key });
+  if (typeof data !== "number") throw new Error("Bad counter payload");
+  return data;
 };
 
-const counterRequestWithRetry = async (key, hit, retries = 2) => {
-  let lastError;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    try {
-      return await counterRequest(key, hit);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError;
+const incrementCounter = async (key) => {
+  const data = await supabaseRequest(`/rest/v1/rpc/increment_counter`, { key_name: key });
+  if (typeof data !== "number") throw new Error("Bad counter payload");
+  return data;
 };
 
 const refreshCounters = async () => {
   try {
     const [views, likes] = await Promise.all([
-      counterRequestWithRetry(VIEW_KEY, false),
-      counterRequestWithRetry(LIKE_KEY, false)
+      getCounter(VIEW_KEY),
+      getCounter(LIKE_KEY)
     ]);
     setNumber(viewCountEl, views);
     setNumber(likeCountEl, likes);
@@ -152,7 +162,7 @@ const refreshCounters = async () => {
 const registerViewOnce = async () => {
   try {
     const shouldCountView = !getFlag(VIEW_LOCAL_FLAG);
-    const views = await counterRequestWithRetry(VIEW_KEY, shouldCountView);
+    const views = shouldCountView ? await incrementCounter(VIEW_KEY) : await getCounter(VIEW_KEY);
     setNumber(viewCountEl, views);
     setStoredCount(VIEW_COUNT_LOCAL, views);
     if (shouldCountView) setFlag(VIEW_LOCAL_FLAG, true);
@@ -180,7 +190,7 @@ const setupLikeButton = async () => {
     likeBtn.textContent = "Sending...";
 
     try {
-      const likes = await counterRequest(LIKE_KEY, true);
+      const likes = await incrementCounter(LIKE_KEY);
       setNumber(likeCountEl, likes);
       setStoredCount(LIKE_COUNT_LOCAL, likes);
       setFlag(LIKE_LOCAL_FLAG, true);
@@ -200,6 +210,10 @@ const setupLikeButton = async () => {
 const init = async () => {
   setNumber(viewCountEl, getStoredCount(VIEW_COUNT_LOCAL));
   setNumber(likeCountEl, getStoredCount(LIKE_COUNT_LOCAL));
+  if (!isSupabaseConfigured()) {
+    if (likeBtn) likeBtn.textContent = "Setup Supabase";
+    return;
+  }
   await Promise.all([registerViewOnce(), refreshCounters()]);
   setupLikeButton();
   setInterval(refreshCounters, COUNTER_REFRESH_MS);
