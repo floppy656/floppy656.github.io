@@ -1,9 +1,9 @@
 // Edit your profile here only.
 const PROFILE = {
   nickname: "Floppx.",
-  bio: "Yo, my names Floppx and im a starting developer. Im trying to improve everyday so if you have any tips/reccomendations dm me anywhere. Also thanks for every support :P",
+  bio: "horYo, my names Floppx and im a starting developer. Im trying to improve everyday so if you have any tips/recomendations dm me anywhere. Also thanks for every support :P.",
   avatar: "./assets/pfp.jpg",
-  background: "./assets/video.mp4", // supports gif/jpg/png/webp
+  background: "./assets/bg.gif", // supports gif/jpg/png/webp/mp4 background image file
   music: "./assets/music.mp3",
   musicVolume: 0.25 // 0.0 to 1.0
 };
@@ -17,13 +17,14 @@ const likeBtn = document.getElementById("likeBtn");
 const likeCountEl = document.getElementById("likeCount");
 const viewCountEl = document.getElementById("viewCount");
 
-const COUNTER_NAMESPACE = "sergi-personal-site";
+const COUNTER_NAMESPACE = "floppy656-personal-site-v2";
 const VIEW_KEY = "views";
 const LIKE_KEY = "likes";
 const LIKE_LOCAL_FLAG = "liked_once";
 const VIEW_LOCAL_FLAG = "viewed_once";
 const COUNTER_REFRESH_MS = 3000;
-const MEMORY_FLAGS = {};
+
+const memoryStore = {};
 
 if (nicknameEl) nicknameEl.textContent = PROFILE.nickname;
 if (bioEl) bioEl.textContent = PROFILE.bio;
@@ -35,33 +36,29 @@ if (music) {
 }
 
 const baseTitle = document.title;
-const year = new Date().getFullYear();
-document.title = `${baseTitle} - ${year}`;
+document.title = `${baseTitle} - ${new Date().getFullYear()}`;
 
 if (music) {
   const startMusic = async () => {
     try {
       await music.play();
     } catch (error) {
-      // Autoplay can be blocked; retry after first user interaction.
+      // Browser blocked autoplay; click fallback below.
     }
   };
-
   startMusic();
   window.addEventListener("click", startMusic, { once: true });
 }
 
-const setNumber = (element, value) => {
-  if (element) {
-    element.textContent = String(value);
-  }
+const setNumber = (el, value) => {
+  if (el) el.textContent = String(value);
 };
 
 const getFlag = (key) => {
   try {
     return localStorage.getItem(key) === "true";
   } catch (error) {
-    return MEMORY_FLAGS[key] === true;
+    return memoryStore[key] === true;
   }
 };
 
@@ -69,75 +66,101 @@ const setFlag = (key, value) => {
   try {
     localStorage.setItem(key, value ? "true" : "false");
   } catch (error) {
-    MEMORY_FLAGS[key] = value;
+    memoryStore[key] = value;
   }
 };
 
-const updateCounter = async (key, hit) => {
-  const url = `https://api.countapi.xyz/${hit ? "hit" : "get"}/${COUNTER_NAMESPACE}/${key}`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("Counter request failed");
-  const data = await response.json();
-  return data.value ?? 0;
+const fetchJsonWithTimeout = async (url, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
-const loadCounters = async () => {
-  try {
-    const shouldHitView = !getFlag(VIEW_LOCAL_FLAG);
-    const viewCount = await updateCounter(VIEW_KEY, shouldHitView);
-    if (shouldHitView) {
-      setFlag(VIEW_LOCAL_FLAG, true);
+const counterRequest = async (key, hit) => {
+  const route = hit ? "hit" : "get";
+  const url = `https://api.countapi.xyz/${route}/${COUNTER_NAMESPACE}/${key}`;
+  const data = await fetchJsonWithTimeout(url);
+  if (typeof data.value !== "number") throw new Error("Bad counter payload");
+  return data.value;
+};
+
+const counterRequestWithRetry = async (key, hit, retries = 2) => {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await counterRequest(key, hit);
+    } catch (error) {
+      lastError = error;
     }
-    setNumber(viewCountEl, viewCount);
-  } catch (error) {
-    // Keep existing value if network is blocked.
   }
-
-  try {
-    const likes = await updateCounter(LIKE_KEY, false);
-    setNumber(likeCountEl, likes);
-  } catch (error) {
-    // Keep existing value if network is blocked.
-  }
+  throw lastError;
 };
-
-loadCounters();
 
 const refreshCounters = async () => {
   try {
     const [views, likes] = await Promise.all([
-      updateCounter(VIEW_KEY, false),
-      updateCounter(LIKE_KEY, false)
+      counterRequestWithRetry(VIEW_KEY, false),
+      counterRequestWithRetry(LIKE_KEY, false)
     ]);
     setNumber(viewCountEl, views);
     setNumber(likeCountEl, likes);
   } catch (error) {
-    // Keep previous values on temporary network errors.
+    // Keep existing numbers when API is temporarily unavailable.
   }
 };
 
-setInterval(refreshCounters, COUNTER_REFRESH_MS);
-window.addEventListener("focus", refreshCounters);
+const registerViewOnce = async () => {
+  try {
+    const shouldCountView = !getFlag(VIEW_LOCAL_FLAG);
+    const views = await counterRequestWithRetry(VIEW_KEY, shouldCountView);
+    setNumber(viewCountEl, views);
+    if (shouldCountView) setFlag(VIEW_LOCAL_FLAG, true);
+  } catch (error) {
+    await refreshCounters();
+  }
+};
 
-if (likeBtn) {
-  const alreadyLiked = getFlag(LIKE_LOCAL_FLAG);
-  if (alreadyLiked) {
+const setupLikeButton = async () => {
+  if (!likeBtn) return;
+
+  if (getFlag(LIKE_LOCAL_FLAG)) {
     likeBtn.disabled = true;
-    likeBtn.textContent = "Thanks for your support";
+    likeBtn.textContent = "Thanks!";
+    return;
   }
 
   likeBtn.addEventListener("click", async () => {
     if (getFlag(LIKE_LOCAL_FLAG)) return;
+    likeBtn.disabled = true;
     likeBtn.textContent = "Sending...";
+
     try {
-      const likes = await updateCounter(LIKE_KEY, true);
+      const likes = await counterRequest(LIKE_KEY, true);
       setNumber(likeCountEl, likes);
       setFlag(LIKE_LOCAL_FLAG, true);
-      likeBtn.disabled = true;
-      likeBtn.textContent = "Thanks for your support";
-      refreshCounters();
+      likeBtn.textContent = "Thanks!";
     } catch (error) {
+      likeBtn.disabled = false;
       likeBtn.textContent = "Failed - Try Again";
     }
   });
-}
+};
+
+const init = async () => {
+  await Promise.all([registerViewOnce(), refreshCounters()]);
+  setupLikeButton();
+  setInterval(refreshCounters, COUNTER_REFRESH_MS);
+  window.addEventListener("focus", refreshCounters);
+};
+
+init();
