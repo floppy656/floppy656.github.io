@@ -3,7 +3,7 @@ const PROFILE = {
   nickname: "Floppx.",
   bio: "Yo, my names Floppx and im a starting developer. Im trying to improve everyday so if you have any tips/reccomendations dm me anywhere. Also thanks for every support :P",
   avatar: "./assets/pfp.jpg",
-  background: "./assets/bg.gif", // supports gif/jpg/png/webp
+  background: "./assets/video.mp4", // supports gif/jpg/png/webp
   music: "./assets/music.mp3",
   musicVolume: 0.25 // 0.0 to 1.0
 };
@@ -23,6 +23,7 @@ const LIKE_KEY = "likes";
 const LIKE_LOCAL_FLAG = "liked_once";
 const VIEW_LOCAL_FLAG = "viewed_once";
 const COUNTER_REFRESH_MS = 3000;
+const MEMORY_FLAGS = {};
 
 if (nicknameEl) nicknameEl.textContent = PROFILE.nickname;
 if (bioEl) bioEl.textContent = PROFILE.bio;
@@ -56,6 +57,22 @@ const setNumber = (element, value) => {
   }
 };
 
+const getFlag = (key) => {
+  try {
+    return localStorage.getItem(key) === "true";
+  } catch (error) {
+    return MEMORY_FLAGS[key] === true;
+  }
+};
+
+const setFlag = (key, value) => {
+  try {
+    localStorage.setItem(key, value ? "true" : "false");
+  } catch (error) {
+    MEMORY_FLAGS[key] = value;
+  }
+};
+
 const updateCounter = async (key, hit) => {
   const url = `https://api.countapi.xyz/${hit ? "hit" : "get"}/${COUNTER_NAMESPACE}/${key}`;
   const response = await fetch(url);
@@ -66,21 +83,21 @@ const updateCounter = async (key, hit) => {
 
 const loadCounters = async () => {
   try {
-    const shouldHitView = localStorage.getItem(VIEW_LOCAL_FLAG) !== "true";
+    const shouldHitView = !getFlag(VIEW_LOCAL_FLAG);
     const viewCount = await updateCounter(VIEW_KEY, shouldHitView);
     if (shouldHitView) {
-      localStorage.setItem(VIEW_LOCAL_FLAG, "true");
+      setFlag(VIEW_LOCAL_FLAG, true);
     }
     setNumber(viewCountEl, viewCount);
   } catch (error) {
-    setNumber(viewCountEl, 0);
+    // Keep existing value if network is blocked.
   }
 
   try {
     const likes = await updateCounter(LIKE_KEY, false);
     setNumber(likeCountEl, likes);
   } catch (error) {
-    setNumber(likeCountEl, 0);
+    // Keep existing value if network is blocked.
   }
 };
 
@@ -103,23 +120,24 @@ setInterval(refreshCounters, COUNTER_REFRESH_MS);
 window.addEventListener("focus", refreshCounters);
 
 if (likeBtn) {
-  const alreadyLiked = localStorage.getItem(LIKE_LOCAL_FLAG) === "true";
+  const alreadyLiked = getFlag(LIKE_LOCAL_FLAG);
   if (alreadyLiked) {
     likeBtn.disabled = true;
     likeBtn.textContent = "Thanks for your support";
   }
 
   likeBtn.addEventListener("click", async () => {
-    if (localStorage.getItem(LIKE_LOCAL_FLAG) === "true") return;
+    if (getFlag(LIKE_LOCAL_FLAG)) return;
+    likeBtn.textContent = "Sending...";
     try {
       const likes = await updateCounter(LIKE_KEY, true);
       setNumber(likeCountEl, likes);
-      localStorage.setItem(LIKE_LOCAL_FLAG, "true");
+      setFlag(LIKE_LOCAL_FLAG, true);
       likeBtn.disabled = true;
       likeBtn.textContent = "Thanks for your support";
       refreshCounters();
     } catch (error) {
-      likeBtn.textContent = "Try Again";
+      likeBtn.textContent = "Failed - Try Again";
     }
   });
 }
