@@ -100,8 +100,8 @@ const isSupabaseConfigured = () =>
 const supabaseRequest = async (path, body, timeoutMs = 8000) => {
   if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
 
-  const normalizedBase = SUPABASE_URL.replace(/\/+$/, "");
-  const url = `${normalizedBase}${path}`;
+  const normalizedBase = SUPABASE_URL.replace(/\/+$/, "").replace(/\/rest\/v1$/i, "");
+  const url = `${normalizedBase}/rest/v1${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -125,13 +125,13 @@ const supabaseRequest = async (path, body, timeoutMs = 8000) => {
 };
 
 const getCounter = async (key) => {
-  const data = await supabaseRequest(`/rest/v1/rpc/get_counter`, { key_name: key });
+  const data = await supabaseRequest(`/rpc/get_counter`, { key_name: key });
   if (typeof data !== "number") throw new Error("Bad counter payload");
   return data;
 };
 
 const incrementCounter = async (key) => {
-  const data = await supabaseRequest(`/rest/v1/rpc/increment_counter`, { key_name: key });
+  const data = await supabaseRequest(`/rpc/increment_counter`, { key_name: key });
   if (typeof data !== "number") throw new Error("Bad counter payload");
   return data;
 };
