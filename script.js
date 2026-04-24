@@ -59,12 +59,6 @@ const setNumber = (el, value) => {
   if (el) el.textContent = String(value);
 };
 
-const getCurrentCount = (el) => {
-  if (!el) return 0;
-  const parsed = Number.parseInt(el.textContent || "0", 10);
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
-
 const getStoredCount = (key) => {
   try {
     const parsed = Number.parseInt(localStorage.getItem(key) || "0", 10);
@@ -167,11 +161,7 @@ const registerViewOnce = async () => {
     setStoredCount(VIEW_COUNT_LOCAL, views);
     if (shouldCountView) setFlag(VIEW_LOCAL_FLAG, true);
   } catch (error) {
-    const localViews = getStoredCount(VIEW_COUNT_LOCAL);
-    const adjustedViews = !getFlag(VIEW_LOCAL_FLAG) ? localViews + 1 : localViews;
-    setNumber(viewCountEl, adjustedViews);
-    setStoredCount(VIEW_COUNT_LOCAL, adjustedViews);
-    if (!getFlag(VIEW_LOCAL_FLAG)) setFlag(VIEW_LOCAL_FLAG, true);
+    setNumber(viewCountEl, getStoredCount(VIEW_COUNT_LOCAL));
   }
 };
 
@@ -196,13 +186,8 @@ const setupLikeButton = async () => {
       setFlag(LIKE_LOCAL_FLAG, true);
       likeBtn.textContent = "Thanks!";
     } catch (error) {
-      // Fallback: still accept the like locally so user experience never breaks.
-      const currentLikes = getCurrentCount(likeCountEl);
-      const localLikes = currentLikes + 1;
-      setNumber(likeCountEl, localLikes);
-      setStoredCount(LIKE_COUNT_LOCAL, localLikes);
-      setFlag(LIKE_LOCAL_FLAG, true);
-      likeBtn.textContent = "Thanks!";
+      likeBtn.disabled = false;
+      likeBtn.textContent = "Try Again";
     }
   });
 };
