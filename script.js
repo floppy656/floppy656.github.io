@@ -112,7 +112,6 @@ const supabaseRequest = async (path, body, timeoutMs = 8000) => {
       headers: {
         "Content-Type": "application/json",
         apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         Accept: "application/json"
       },
       body: JSON.stringify(body)
