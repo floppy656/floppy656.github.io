@@ -1,4 +1,3 @@
-// Edit your profile here only.
 const PROFILE = {
   nickname: "Floppx.",
   bio: "Yo, my names Floppx and im a starting developer. Im trying to improve everyday so if you have any tips/recomendations dm me anywhere. Also thanks for every support :P.",
@@ -17,7 +16,6 @@ const likeBtn = document.getElementById("likeBtn");
 const likeCountEl = document.getElementById("likeCount");
 const viewCountEl = document.getElementById("viewCount");
 
-// Fill these from your Supabase project settings.
 const SUPABASE_URL = "https://piebqfymfsdpclxtywng.supabase.co/rest/v1/";
 const SUPABASE_ANON_KEY = "sb_publishable_PoCiVcFVc1XHpjs3aJnR-w_5VUIyHd9";
 
